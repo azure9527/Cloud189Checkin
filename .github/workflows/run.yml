@@ -29,20 +29,15 @@ jobs:
         if: vars.debug == '1'
         run: |
           echo "CLOUD189_VERBOSE=1" >> $GITHUB_ENV
-
-      - name: 🗳️ Check if cacheToken is true
-        if: vars.cacheToken == '1'
-        run: |
-          echo "CACHE_TOKEN=1" >> $GITHUB_ENV
       
       - name: 📹 Restore cached Cookie
         id: cache-cookie-restore
-        if: vars.cacheToken == '1'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: .token
           key: ${{ runner.os }}-cache-token
-    
+          restore-keys: ${{ runner.os }}-cache-token-
+
       - name: 🔧 Init secrets
         uses: shine1594/secrets-to-env-action@master
         with:
@@ -60,6 +55,12 @@ jobs:
           timeout_minutes: 30
           max_attempts: 3
           command: npm start
+      
+      - name: 📹 Save cached Cookie
+        uses: actions/cache/save@v4
+        with:
+          path: .token
+          key: ${{ runner.os }}-cache-token-${{ hashFiles('.token/*.json') }}
 
       - name: 🚗 Keep Running
         if: github.event_name == 'schedule'

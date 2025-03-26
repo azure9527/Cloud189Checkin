@@ -11,7 +11,6 @@ const {
 const push = require("./push");
 const { log4js, cleanLogs, catLogs } = require("./logger");
 const execThreshold = process.env.EXEC_THRESHOLD || 1;
-const cacheToken =  process.env.CACHE_TOKEN === "1";
 const tokenDir = ".token"
 
 // 个人任务签到
@@ -19,10 +18,10 @@ const doUserTask = async (cloudClient, logger) => {
   const tasks = Array.from({ length: execThreshold }, () =>
     cloudClient.userSign()
   );
-  const result = (await Promise.all(tasks)).filter((res) => !res.isSign);
+  const result = (await Promise.allSettled(tasks)).filter(({status,value })=> status ==='fulfilled' && !value.isSign);
   logger.info(
     `个人签到任务: 成功数/总请求数 ${result.length}/${tasks.length} 获得 ${
-      result.map((res) => res.netdiskBonus)?.join(",") || "0"
+      result.map(({ value }) => value.netdiskBonus)?.join(",") || "0"
     }M 空间`
   );
 };
@@ -53,10 +52,10 @@ const doFamilyTask = async (cloudClient, logger) => {
     const tasks = Array.from({ length: execThreshold }, () =>
       cloudClient.familyUserSign(familyId)
     );
-    const result = (await Promise.all(tasks)).filter((res) => !res.signStatus);
+    const result = (await Promise.allSettled(tasks)).filter(({ status, value })=> status ==='fulfilled' && !value.signStatus);
     return logger.info(
       `家庭签到任务: 成功数/总请求数 ${result.length}/${tasks.length} 获得 ${
-        result.map((res) => res.bonusSpace)?.join(",") || "0"
+        result.map(({ value }) => value.bonusSpace)?.join(",") || "0"
       }M 空间`
     );
   }
@@ -67,14 +66,10 @@ const run = async (userName, password, userSizeInfoMap, logger) => {
     const before = Date.now();
     try {
       logger.log('开始执行');
-      let token = null
-      if(cacheToken) {
-        token = new FileTokenStore(`${tokenDir}/${userName}.json`)
-      }
       const cloudClient = new CloudClient({
         username: userName, 
         password,
-        token: token
+        token: new FileTokenStore(`${tokenDir}/${userName}.json`)
       });
       const beforeUserSizeInfo = await cloudClient.getUserSizeInfo();
       userSizeInfoMap.set(userName, {
@@ -106,7 +101,7 @@ const run = async (userName, password, userSizeInfoMap, logger) => {
 
 // 开始执行程序
 async function main() {
-  if(cacheToken && !fs.existsSync(tokenDir)){
+  if(!fs.existsSync(tokenDir)){
     fs.mkdirSync(tokenDir)
   }
   //  用于统计实际容量变化
